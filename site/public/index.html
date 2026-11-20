@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nginx2root: проверка nginx — документация</title>
+<meta name="description" content="Внешняя проверка подверженности nginx уязвимостям nginx2root (CVE-2026-123007, -123634, -123633, -121810, -113425) и пошаговая инструкция для сервера.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f6feb'/%3E%3Ctext x='32' y='44' font-size='34' font-family='monospace' text-anchor='middle' fill='white'%3En%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #16181d;
+  --muted: #5b6472;
+  --line: #e2e6ee;
+  --accent: #1f6feb;
+  --accent-soft: #e8f0fe;
+  --code-bg: #11151c;
+  --code-ink: #e6edf3;
+  --warn: #9a3412;
+  --ok: #166534;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #151b23;
+    --ink: #e6edf3;
+    --muted: #9aa7b7;
+    --line: #253040;
+    --accent: #58a6ff;
+    --accent-soft: #16243a;
+    --code-bg: #0a0e14;
+    --code-ink: #e6edf3;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+header.hero {
+  background: linear-gradient(135deg, #0b1f3a 0%, #123a63 55%, #1f6feb 100%);
+  color: #fff;
+  padding: 56px 0 46px;
+}
+header.hero .wrap { position: relative; }
+header.hero h1 {
+  margin: 0 0 12px;
+  font-size: clamp(30px, 4.2vw, 46px);
+  letter-spacing: -0.02em;
+}
+header.hero p.lead {
+  margin: 0 0 22px;
+  max-width: 780px;
+  font-size: 18px;
+  color: #d5e3f7;
+}
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge {
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: #eaf2ff;
+  background: rgba(255,255,255,.08);
+}
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 36px;
+  padding: 36px 0 72px;
+  align-items: start;
+}
+nav.toc {
+  position: sticky;
+  top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+nav.toc h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+nav.toc ul { list-style: none; margin: 0; padding: 0; }
+nav.toc li { margin: 2px 0; font-size: 14px; }
+nav.toc li.toc-h3 { padding-left: 14px; font-size: 13px; }
+nav.toc li.toc-h4 { padding-left: 28px; font-size: 12.5px; }
+nav.toc a { color: var(--ink); }
+nav.toc a:hover { color: var(--accent); }
+main { min-width: 0; }
+section.doc {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 34px 40px 40px;
+  margin-bottom: 28px;
+  overflow-wrap: break-word;
+}
+section.doc > h2:first-child { margin-top: 0; }
+h2, h3, h4 { line-height: 1.25; letter-spacing: -0.01em; }
+h2 { font-size: 28px; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 21px; margin: 30px 0 10px; }
+h4 { font-size: 17px; margin: 24px 0 8px; }
+a.anchor { margin-left: 8px; opacity: 0; font-weight: 400; font-size: .8em; }
+h2:hover a.anchor, h3:hover a.anchor, h4:hover a.anchor { opacity: .5; }
+p { margin: 0 0 14px; }
+ul, ol { margin: 0 0 16px; padding-left: 24px; }
+li { margin: 5px 0; }
+li.task { list-style: none; margin-left: -22px; }
+li.task .box {
+  display: inline-block;
+  width: 15px; height: 15px;
+  margin-right: 9px;
+  border: 2px solid var(--muted);
+  border-radius: 4px;
+  vertical-align: -2px;
+}
+li.task.done .box { background: var(--ok); border-color: var(--ok); }
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+pre {
+  position: relative;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border-radius: 12px;
+  padding: 18px 20px;
+  overflow: auto;
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+pre[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0; right: 0;
+  padding: 3px 10px;
+  font: 11px/1.6 ui-monospace, monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #8b98a9;
+  background: rgba(255,255,255,.06);
+  border-radius: 0 12px 0 8px;
+}
+blockquote {
+  margin: 0 0 18px;
+  padding: 12px 18px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 10px 10px 0;
+  color: var(--ink);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 20px;
+  font-size: 14.5px;
+}
+th, td {
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+th { background: var(--accent-soft); font-weight: 600; }
+tbody tr:nth-child(even) { background: rgba(127,127,127,.05); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 30px 0; }
+footer {
+  border-top: 1px solid var(--line);
+  padding: 26px 0 40px;
+  color: var(--muted);
+  font-size: 14px;
+}
+footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; max-height: none; }
+  section.doc { padding: 24px 20px 28px; }
+}
+@media print {
+  header.hero { background: none; color: #000; padding: 0 0 16px; }
+  nav.toc, a.anchor { display: none; }
+  section.doc { border: 0; padding: 0; }
+  pre { white-space: pre-wrap; }
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <h1>nginx2root: проверка nginx</h1>
+    <p class="lead">Безопасная внешняя проверка подверженности nginx уязвимостям
+      CVE-2026-123007, -123634, -123633, -121810 и -113425. Без эксплуатации:
+      только рукопожатие, fingerprint и разбор конфигурации.</p>
+    <div class="badges">
+      <span class="badge">Python 3.8+</span>
+      <span class="badge">только stdlib</span>
+      <span class="badge">CLI + JSON</span>
+      <span class="badge">версия 0.1.0</span>
+    </div>
+  </div>
+</header>
+<div class="wrap layout">
+  <aside><nav class="toc" aria-label="Содержание"><h2>Содержание</h2><ul>
+<li class="toc-h2"><a href="#nginx2root-exposure-checker">nginx2root exposure checker</a></li>
+<li class="toc-h3"><a href="#uyazvimosti">Уязвимости</a></li>
+<li class="toc-h3"><a href="#trebovaniya">Требования</a></li>
+<li class="toc-h3"><a href="#ispolzovanie">Использование</a></li>
+<li class="toc-h3"><a href="#chto-imenno-proveryaetsya">Что именно проверяется</a></li>
+<li class="toc-h3"><a href="#kak-chitat-vyvod">Как читать вывод</a></li>
+<li class="toc-h3"><a href="#ogranicheniya">Ограничения</a></li>
+<li class="toc-h3"><a href="#chto-sdelat-na-hoste">Что сделать на хосте</a></li>
+<li class="toc-h3"><a href="#json">JSON</a></li>
+<li class="toc-h3"><a href="#testy">Тесты</a></li>
+<li class="toc-h3"><a href="#etika">Этика</a></li>
+<li class="toc-h2"><a href="#proverka-nginx-na-servere-poshagovaya-instrukciya">Проверка nginx на сервере: пошаговая инструкция</a></li>
+<li class="toc-h3"><a href="#0-podgotovka">0. Подготовка</a></li>
+<li class="toc-h3"><a href="#1-versiya-nginx">1. Версия nginx</a></li>
+<li class="toc-h4"><a href="#kak-chitat-versiyu">Как читать версию</a></li>
+<li class="toc-h3"><a href="#2-moduli">2. Модули</a></li>
+<li class="toc-h3"><a href="#3-konfiguraciya">3. Конфигурация</a></li>
+<li class="toc-h4"><a href="#3-1-http-2-cve-2026-123007-cve-2026-123633">3.1. HTTP/2 (CVE-2026-123007, CVE-2026-123633)</a></li>
+<li class="toc-h4"><a href="#3-2-http-3-cve-2026-121810">3.2. HTTP/3 (CVE-2026-121810)</a></li>
+<li class="toc-h4"><a href="#3-3-resolver-peremennyy-proxy-pass-mirror-cve-2026-123634">3.3. Resolver + переменный proxy_pass + mirror (CVE-2026-123634)</a></li>
+<li class="toc-h4"><a href="#3-4-mail-proxy-cve-2026-113425">3.4. Mail proxy (CVE-2026-113425)</a></li>
+<li class="toc-h3"><a href="#4-fakticheskiy-protokol-na-samom-servere">4. Фактический протокол на самом сервере</a></li>
+<li class="toc-h3"><a href="#5-proverka-ne-ekspluatirovali-li-uyazvimost">5. Проверка, не эксплуатировали ли уязвимость</a></li>
+<li class="toc-h3"><a href="#6-deystviya">6. Действия</a></li>
+<li class="toc-h4"><a href="#6-1-obnovlenie-osnovnoe">6.1. Обновление (основное)</a></li>
+<li class="toc-h4"><a href="#6-2-vremennaya-mera-vyklyuchit-http-2">6.2. Временная мера: выключить HTTP/2</a></li>
+<li class="toc-h4"><a href="#6-3-http-3">6.3. HTTP/3</a></li>
+<li class="toc-h4"><a href="#6-4-resolver-mirror">6.4. Resolver + mirror</a></li>
+<li class="toc-h4"><a href="#6-5-mail-proxy">6.5. Mail proxy</a></li>
+<li class="toc-h3"><a href="#7-chek-list">7. Чек-лист</a></li>
+</ul></nav></aside>
+  <main>
+    <section class="doc">
+<h2 id="nginx2root-exposure-checker">nginx2root exposure checker<a class="anchor" href="#nginx2root-exposure-checker">#</a></h2>
+<p>Безопасная внешняя проверка: подвержен ли сайт уязвимостям <strong>nginx2root</strong>, опубликованным Xint 18 ноября 2026 года и исправленным в <strong>nginx 1.31.9</strong> и <strong>1.30.7</strong>.</p>
+<p>Инструмент делает только рукопожатие и обычные запросы. Он <strong>не эксплуатирует</strong> уязвимости: не отправляет <code>WINDOW_UPDATE</code>-флуд, не рвёт потоки через <code>RST_STREAM</code> и не пытается вызвать падение воркера.</p>
+<h3 id="uyazvimosti">Уязвимости<a class="anchor" href="#uyazvimosti">#</a></h3>
+<table>
+<thead><tr>
+<th>CVE</th>
+<th>Что это</th>
+<th>Уязвимы</th>
+<th>Нужно для атаки</th>
+</tr></thead><tbody>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123007">CVE-2026-123007</a></td><td>переполнение окна flow control в HTTP/2 (RCE, critical)</td><td>1.9.5–1.31.8</td><td>HTTP/2</td></tr>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123634">CVE-2026-123634</a></td><td>use-after-free в resolver</td><td>0.6.18–1.31.8</td><td><code>resolver</code> + <code>proxy_pass</code> с переменной + <code>mirror</code></td></tr>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123633">CVE-2026-123633</a></td><td>use-after-free в HTTP/2</td><td>1.19.7–1.31.8</td><td>HTTP/2 + проксирование на upstream</td></tr>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-121810">CVE-2026-121810</a></td><td>use-after-free в HTTP/3</td><td>1.25.0–1.31.8</td><td>HTTP/3 + проксирование на upstream</td></tr>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-113425">CVE-2026-113425</a></td><td>use-after-free в mail proxy</td><td>0.5.33–1.31.8</td><td><code>proxy on</code> + <code>auth_http</code></td></tr>
+</tbody></table>
+<p>Официальные источники: <a href="https://nginx.org/en/security_advisories.html">nginx security advisories</a>, <a href="https://nginx.org/en/CHANGES">nginx CHANGES 1.31.9</a>, <a href="https://xint.io/blog/nginx2root-remote-code-execution">разбор Xint</a>.</p>
+<h3 id="trebovaniya">Требования<a class="anchor" href="#trebovaniya">#</a></h3>
+<ul>
+<li>Python 3.8+ (проверено на 3.12), только стандартная библиотека.</li>
+<li>Для <code>--verify</code> нужен системный набор CA-сертификатов.</li>
+<li>Для интеграционных тестов — <code>docker</code> и <code>openssl</code>.</li>
+</ul>
+<h3 id="ispolzovanie">Использование<a class="anchor" href="#ispolzovanie">#</a></h3>
+<pre data-lang="bash"><code>./nginx2root_check.py https://example.com
+./nginx2root_check.py example.com:8443 --timeout 8
+./nginx2root_check.py https://example.com --json &gt; report.json
+./nginx2root_check.py --file targets.txt --concurrency 4
+cat targets.txt | ./nginx2root_check.py --no-h3</code></pre>
+<p>Полезные флаги:</p>
+<table>
+<thead><tr>
+<th>Флаг</th>
+<th>Смысл</th>
+</tr></thead><tbody>
+<tr><td><code>--json</code></td><td>машиночитаемый отчёт (схема ниже)</td></tr>
+<tr><td><code>--port N</code></td><td>переопределить порт для всех целей</td></tr>
+<tr><td><code>--path /x</code></td><td>путь для fingerprint-запроса</td></tr>
+<tr><td><code>--timeout S</code></td><td>таймаут соединения/чтения, по умолчанию 5 с</td></tr>
+<tr><td><code>--attempts N</code></td><td>повторов при таймауте/сетевой ошибке (по умолчанию 3)</td></tr>
+<tr><td><code>--no-h2-request</code></td><td>только ALPN, без HTTP/2-запроса</td></tr>
+<tr><td><code>--no-h3</code></td><td>не проверять HTTP/3 (Alt-Svc и QUIC)</td></tr>
+<tr><td><code>--verify</code></td><td>строгая проверка TLS-сертификата (по умолчанию выключена)</td></tr>
+<tr><td><code>--concurrency N</code></td><td>параллельность в batch-режиме (по умолчанию 2)</td></tr>
+<tr><td><code>-v</code></td><td>диагностика в stderr</td></tr>
+</tbody></table>
+<p>Коды выхода: <code>0</code> — проблем не найдено, <code>1</code> — есть <code>LIKELY_VULNERABLE</code>, <code>2</code> — результат неопределён (CDN, неизвестная версия, ошибка), <code>3</code> — ошибка аргументов.</p>
+<h3 id="chto-imenno-proveryaetsya">Что именно проверяется<a class="anchor" href="#chto-imenno-proveryaetsya">#</a></h3>
+<ol>
+<li><strong>TLS/ALPN.</strong> Отдельное рукопожатие с <code>ALPN=[&quot;h2&quot;,&quot;http/1.1&quot;]</code>. Если сервер согласовал <code>h2</code>, значит HTTP/2 включён на этом порту — это условие CVE-2026-123007 и CVE-2026-123633.</li>
+<li><strong>HTTP/1.1 fingerprint.</strong> <code>HEAD /</code> и, если версия не видна, <code>GET</code> на несуществующий путь: <code>Server:</code>, тело дефолтной страницы ошибки, признак дистрибутивной сборки (<code>(Ubuntu)</code>, <code>(Debian)</code>), заголовки CDN. OpenResty, Tengine, Angie, Kong и APISIX распознаются как nginx-семейство: они содержат ядро nginx и подвержены тем же CVE.</li>
+<li><strong>HTTP/2-обмен.</strong> Preface + <code>SETTINGS</code> + один <code>HEADERS</code> (<code>GET /</code>). Подтверждает, что за ALPN действительно живой HTTP/2. Никаких управляющих кадров, влияющих на окна.</li>
+<li><strong>HTTP/3.</strong> Заголовок <code>Alt-Svc</code> с <code>h3</code> и UDP-проба QUIC: отправляется <code>Initial</code> с неподдерживаемой версией, сервер должен ответить Version Negotiation.</li>
+<li><strong>Вердикты.</strong> Версия сверяется с диапазонами: <code>1.9.5–1.31.8</code> и <code>1.30.0–1.30.6</code> уязвимы; <code>1.31.9+</code> и <code>1.30.7+</code> исправлены; <code>≤1.9.4</code> не затронуты.</li>
+</ol>
+<h3 id="kak-chitat-vyvod">Как читать вывод<a class="anchor" href="#kak-chitat-vyvod">#</a></h3>
+<p>Каждый CVE получает две вещи: <strong>verdict</strong> (метку) и <strong>действие</strong> — что делать.</p>
+<table>
+<thead><tr>
+<th>Метка</th>
+<th>Код</th>
+<th>Действие</th>
+</tr></thead><tbody>
+<tr><td>ВЕРОЯТНО УЯЗВИМ</td><td><code>LIKELY_VULNERABLE</code></td><td>обновить nginx до 1.31.9/1.30.7</td></tr>
+<tr><td>ИСПРАВЛЕНО</td><td><code>PATCHED</code></td><td>ничего не делать</td></tr>
+<tr><td>ПУТЬ АТАКИ ЗАКРЫТ</td><td><code>MITIGATED</code></td><td>ничего не делать (обновить при возможности)</td></tr>
+<tr><td>НЕ ЗАТРОНУТ</td><td><code>NOT_AFFECTED</code></td><td>ничего не делать</td></tr>
+<tr><td>НЕ ПРИМЕНИМО</td><td><code>NOT_APPLICABLE</code></td><td>— (сервер не nginx)</td></tr>
+<tr><td>НЕОПРЕДЕЛЁННО</td><td><code>INCONCLUSIVE</code></td><td>проверить вручную: CDN/бэкпорт/ошибка связи</td></tr>
+<tr><td>ПРОВЕРИТЬ НА СЕРВЕРЕ</td><td><code>UNKNOWN</code></td><td>проверить конфигурацию на хосте</td></tr>
+</tbody></table>
+<p>Последняя строка отчёта — прямой ответ на вопрос «надо что-то делать?»:</p>
+<table>
+<thead><tr>
+<th><code>ИТОГ</code></th>
+<th>Значение</th>
+<th>Код выхода</th>
+</tr></thead><tbody>
+<tr><td><code>ТРЕБУЕТСЯ ДЕЙСТВИЕ</code></td><td>есть <code>LIKELY_VULNERABLE</code></td><td>1</td></tr>
+<tr><td><code>НУЖНА РУЧНАЯ ПРОВЕРКА</code></td><td>есть <code>INCONCLUSIVE</code></td><td>2</td></tr>
+<tr><td><code>ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ</code></td><td>только <code>PATCHED</code>/<code>MITIGATED</code>/<code>NOT_AFFECTED</code></td><td>0</td></tr>
+<tr><td><code>ПРОВЕРКА НЕ ВЫПОЛНЕНА</code></td><td>нет DNS/соединения, CVE не проверялись</td><td>2</td></tr>
+</tbody></table>
+<p>Если проверка невозможна (DNS, таймаут, TLS), таблица CVE не выводится — вместо неё причина и рекомендация. При <code>--no-h3</code> вердикт HTTP/3 становится <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code> и не влияет на код выхода. Если UDP/443 не ответил, HTTP/3 тоже помечается <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code>: молчание UDP может означать фильтр, а не отсутствие HTTP/3.</p>
+<p>Таймауты и сетевые ошибки повторяются до <code>--attempts</code> раз (по умолчанию 3). Если ответ получен не с первой попытки, в <code>note</code> появляется строка «связь нестабильна: успешный ответ получен с попытки N из M».</p>
+<p>Версия берётся не только из <code>nginx/1.30.7</code>, но и из вендорских токенов: <code>nginx-reuseport/1.30.7</code>, <code>nginx-naxsi/1.24.0</code>, <code>nginx-extras/1.18.0</code>. Для таких сборок добавляется <code>note</code> с исходным токеном.</p>
+<p>Пример:</p>
+<pre><code>== https://example.com ==
+  Проверка     ВЫПОЛНЕНА
+  TLS      TLSv1.3; ALPN=h2
+  HTTP/2   согласован, отвечает
+  HTTP/3   не обнаружен
+  Server   nginx/1.24.0 (Ubuntu)
+  CDN      не обнаружен
+
+  CVE-2026-123007  НЕОПРЕДЕЛЁННО        дистрибутивная сборка (Ubuntu): возможен бэкпорт; HTTP/2 включён  → проверить вручную
+  CVE-2026-123634  ПРОВЕРИТЬ НА СЕРВЕРЕ  нужен resolver + proxy_pass с переменной + mirror  → проверить конфигурацию на сервере
+  ...
+  Сводка: НЕОПРЕДЕЛЁННО=3, ПРОВЕРИТЬ НА СЕРВЕРЕ=2
+  ИТОГ: НУЖНА РУЧНАЯ ПРОВЕРКА — автоматический вердикт невозможен
+  2 CVE проверяются только на сервере — см. docs/server-check.md</code></pre>
+<p>При ошибке DNS:</p>
+<pre><code>== https://bad-host.invalid ==
+  Проверка     НЕ ВЫПОЛНЕНА
+  Причина      не удалось разрешить имя (DNS): bad-host.invalid
+  Что делать   проверить домен/DNS и повторить проверку
+
+  CVE не проверялись: нет соединения с сервером.
+  ИТОГ: ПРОВЕРКА НЕ ВЫПОЛНЕНА — выводов об уязвимости сделать нельзя.</code></pre>
+<h3 id="ogranicheniya">Ограничения<a class="anchor" href="#ogranicheniya">#</a></h3>
+<ul>
+<li><strong>Версия — не приговор.</strong> Ubuntu 22.04 (<code>1.18.0-6ubuntu14.22</code>), Debian, RHEL и другие дистрибутивы бэкпортируют исправления, не меняя <code>nginx -v</code>. Для таких сборок чекер выдаёт <code>INCONCLUSIVE</code> — сверяйтесь с <a href="https://ubuntu.com/security/notices/USN-8955-1">USN-8955-1</a> и аналогичными advisory.</li>
+<li><strong>CDN.</strong> Если перед nginx стоит Cloudflare/Akamai/Fastly, проверка видит только edge. Чекер это распознаёт и выдаёт <code>INCONCLUSIVE</code>; для точного результата запускайте его против origin.</li>
+<li><strong>CVE-2026-123634 и CVE-2026-113425</strong> определяются только конфигурацией. Снаружи их проверить нельзя — нужен доступ на хост.</li>
+<li><strong>Скрытая версия.</strong> При <code>server_tokens off</code> остаётся вывод «HTTP/2 включён, версия неизвестна»; это трактуется как риск, потому что исправленные релизы вышли только 18.11.2026. OpenResty и другие форки скрывают версию ядра nginx — их патч-статус проверяется на хосте (<code>openresty -v</code>).</li>
+<li><strong>Фильтрация по IP.</strong> Если TCP-порт открыт, но TLS-рукопожатие и HTTP-запрос молчат, это обычно geo/anti-DDoS-фильтрация вашей сети, а не проблема сайта: проверьте доступность с другой точки (SSL Labs, внешний fetch) и запустите чекер из разрешённой сети.</li>
+<li>Проверка не является пентестом и не гарантирует отсутствие уязвимости.</li>
+</ul>
+<h3 id="chto-sdelat-na-hoste">Что сделать на хосте<a class="anchor" href="#chto-sdelat-na-hoste">#</a></h3>
+<p>Подробная пошаговая инструкция под root (версия, модули, конфиг, ALPN, действия, признаки эксплуатации) — в <a href="docs/server-check.md">docs/server-check.md</a>.</p>
+<p>Кратко:</p>
+<pre data-lang="bash"><code>nginx -v                       # 1.9.5..1.31.8 =&gt; код уязвим
+nginx -V 2&gt;&amp;1 | grep -- --with-http_v2_module
+sudo nginx -T | grep -nE &#x27;listen[[:space:]].*http2|^[[:space:]]*http2[[:space:]]+on&#x27;</code></pre>
+<p>Обновление: nginx <strong>1.31.9</strong> или <strong>1.30.7</strong>, затем перезапуск (reload не заменяет исполняемый файл). Временная мера для двух HTTP/2-CVE — <code>http2 off;</code> в затронутых <code>server</code>-блоках; для HTTP/3 — убрать <code>quic</code>-листeners и <code>http3 off;</code>; для mail proxy — закрыть IMAP/POP3/SMTP от недоверенных сетей.</p>
+<h3 id="json">JSON<a class="anchor" href="#json">#</a></h3>
+<pre data-lang="json"><code>{
+  &quot;checker&quot;: &quot;nginx2root-check&quot;,
+  &quot;version&quot;: &quot;0.1.0&quot;,
+  &quot;generated_at&quot;: &quot;2026-11-20T12:00:00+00:00&quot;,
+  &quot;advisory&quot;: &quot;https://nginx.org/en/security_advisories.html&quot;,
+  &quot;results&quot;: [
+    {
+      &quot;target&quot;: &quot;https://example.com/&quot;,
+      &quot;status&quot;: &quot;OK&quot;,
+      &quot;error&quot;: null,
+      &quot;observation&quot;: { &quot;...&quot;: &quot;TLS, ALPN, заголовки, версия, CDN&quot; },
+      &quot;findings&quot;: [
+        {
+          &quot;cve&quot;: &quot;CVE-2026-123007&quot;,
+          &quot;title&quot;: &quot;HTTP/2 flow-control window overflow&quot;,
+          &quot;severity&quot;: &quot;critical&quot;,
+          &quot;verdict&quot;: &quot;LIKELY_VULNERABLE&quot;,
+          &quot;verdict_label&quot;: &quot;ВЕРОЯТНО УЯЗВИМ&quot;,
+          &quot;action&quot;: &quot;UPDATE&quot;,
+          &quot;action_label&quot;: &quot;обновить nginx до 1.31.9/1.30.7&quot;,
+          &quot;reason&quot;: &quot;nginx 1.31.8 попадает в уязвимый диапазон 1.9.5–1.31.8, HTTP/2 согласован&quot;,
+          &quot;reference&quot;: &quot;https://my.f5.com/manage/s/article/K000163926&quot;
+        }
+      ],
+      &quot;summary&quot;: {
+        &quot;verdict&quot;: &quot;RISK&quot;,
+        &quot;headline&quot;: &quot;ТРЕБУЕТСЯ ДЕЙСТВИЕ&quot;,
+        &quot;action&quot;: &quot;UPDATE&quot;,
+        &quot;action_label&quot;: &quot;обновить nginx до 1.31.9/1.30.7&quot;,
+        &quot;detail&quot;: &quot;как минимум один путь атаки открыт&quot;,
+        &quot;exit_code&quot;: 1,
+        &quot;counts&quot;: {&quot;LIKELY_VULNERABLE&quot;: 1, &quot;MITIGATED&quot;: 2, &quot;UNKNOWN&quot;: 2},
+        &quot;uncheckable&quot;: 2
+      }
+    }
+  ]
+}</code></pre>
+<p>Если цель недоступна:</p>
+<pre data-lang="json"><code>{
+  &quot;target&quot;: &quot;https://bad-host.invalid/&quot;,
+  &quot;status&quot;: &quot;CHECK_FAILED&quot;,
+  &quot;error&quot;: {&quot;code&quot;: &quot;DNS&quot;, &quot;message&quot;: &quot;не удалось разрешить имя (DNS): bad-host.invalid&quot;},
+  &quot;observation&quot;: { &quot;...&quot;: &quot;status=CHECK_FAILED&quot; },
+  &quot;findings&quot;: [],
+  &quot;summary&quot;: {&quot;verdict&quot;: &quot;FAILED&quot;, &quot;headline&quot;: &quot;ПРОВЕРКА НЕ ВЫПОЛНЕНА&quot;, &quot;exit_code&quot;: 2}
+}</code></pre>
+<h3 id="testy">Тесты<a class="anchor" href="#testy">#</a></h3>
+<pre data-lang="bash"><code>python3 -m unittest discover -s tests -v   # юнит + локальные TLS/UDP-серверы
+bash tests/integration/run.sh              # реальный nginx 1.31.8/1.31.9 в Docker</code></pre>
+<p>Интеграционный сценарий проверяет четыре конфигурации: HTTP/2 на уязвимой версии (<code>LIKELY_VULNERABLE</code>), HTTP/2 выключен (<code>MITIGATED</code>), HTTP/2 на 1.31.9 (<code>PATCHED</code>), HTTP/3 на уязвимой версии (<code>LIKELY_VULNERABLE</code>).</p>
+<h3 id="etika">Этика<a class="anchor" href="#etika">#</a></h3>
+<p>Проверяйте только свои серверы или хосты, на проверку которых у вас есть письменное разрешение. Чекер не выполняет атакующих действий, но сам факт сканирования может нарушать правила площадки или законодательство.</p>
+    </section>
+    <section class="doc">
+<h2 id="proverka-nginx-na-servere-poshagovaya-instrukciya">Проверка nginx на сервере: пошаговая инструкция<a class="anchor" href="#proverka-nginx-na-servere-poshagovaya-instrukciya">#</a></h2>
+<p>Для случаев, когда снаружи проверить нельзя (CDN, anti-DDoS, закрытая сеть) или нужно подтвердить вердикт <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code>. Инструкция — <strong>для nginx</strong> (пакет или своя сборка), не для OpenResty. Все команды выполняются <strong>под root</strong>.</p>
+<p>До раздела «Действия» ничего не меняется: только чтение и один дамп конфига.</p>
+<hr>
+<h3 id="0-podgotovka">0. Подготовка<a class="anchor" href="#0-podgotovka">#</a></h3>
+<pre data-lang="bash"><code>sudo -i
+whoami</code></pre>
+<p>Ожидаем <code>root</code>. Если <code>sudo</code> нет — войдите root напрямую.</p>
+<hr>
+<h3 id="1-versiya-nginx">1. Версия nginx<a class="anchor" href="#1-versiya-nginx">#</a></h3>
+<pre data-lang="bash"><code>nginx -v
+nginx -V 2&gt;&amp;1</code></pre>
+<p>Первая команда печатает строку вида <code>nginx version: nginx/1.24.0</code>. Вторая — версию плюс флаги сборки.</p>
+<p>Полная версия пакета (для дистрибутивных сборок):</p>
+<pre data-lang="bash"><code>dpkg -l | grep -E &#x27;^ii\s+nginx&#x27; 2&gt;/dev/null
+rpm -q nginx 2&gt;/dev/null</code></pre>
+<p>Проверьте, что запущен именно этот бинарник:</p>
+<pre data-lang="bash"><code>ps -eo pid,args | grep &#x27;[n]ginx&#x27;
+ls -l /proc/$(cat /run/nginx.pid)/exe</code></pre>
+<p>Если путь в <code>/proc/.../exe</code> отличается от <code>command -v nginx</code> — <code>nginx -v</code> показывает не тот бинарник, который работает.</p>
+<h4 id="kak-chitat-versiyu">Как читать версию<a class="anchor" href="#kak-chitat-versiyu">#</a></h4>
+<table>
+<thead><tr>
+<th>Версия</th>
+<th>Оценка</th>
+</tr></thead><tbody>
+<tr><td>1.9.5 – 1.31.8</td><td>код уязвим к CVE-2026-123007 (если включён HTTP/2)</td></tr>
+<tr><td>1.30.0 – 1.30.6</td><td>уязвима ветка 1.30</td></tr>
+<tr><td>1.31.9+ или 1.30.7+</td><td>исправлено</td></tr>
+<tr><td>1.9.4 и старше</td><td>не затронута HTTP/2-уязвимостями</td></tr>
+<tr><td><code>nginx-reuseport/1.30.7</code>, <code>nginx-naxsi/1.24.0</code></td><td>вендорский токен: ядро — цифры после <code>/</code> (здесь 1.30.7 и 1.24.0)</td></tr>
+<tr><td><code>1.18.0-6ubuntu14.22</code> и подобные</td><td>дистрибутивная сборка: <code>nginx -v</code> не показывает бэкпорт, сверяйте полную версию пакета с advisory (Ubuntu — <a href="https://ubuntu.com/security/notices/USN-8955-1">USN-8955-1</a>)</td></tr>
+</tbody></table>
+<hr>
+<h3 id="2-moduli">2. Модули<a class="anchor" href="#2-moduli">#</a></h3>
+<pre data-lang="bash"><code>nginx -V 2&gt;&amp;1 | tr &#x27; &#x27; &#x27;\n&#x27; | grep -E -- &#x27;--with-http_v2_module|--with-http_v3_module|--with-mail&#x27;</code></pre>
+<ul>
+<li><code>--with-http_v2_module</code> — в бинарнике есть код HTTP/2 (уязвим, если не пропатчен);</li>
+<li><code>--with-http_v3_module</code> — есть HTTP/3;</li>
+<li><code>--with-mail</code> — есть mail proxy (для CVE-2026-113425).</li>
+</ul>
+<p>Если <code>http_v2_module</code> отсутствует — CVE-2026-123007 и -123633 неприменимы.</p>
+<hr>
+<h3 id="3-konfiguraciya">3. Конфигурация<a class="anchor" href="#3-konfiguraciya">#</a></h3>
+<p>Сначала проверка синтаксиса и дамп:</p>
+<pre data-lang="bash"><code>nginx -t
+nginx -T &gt; /root/nginx-config-$(date +%F).txt 2&gt;&amp;1</code></pre>
+<blockquote><code>nginx -T</code> читает конфиг <strong>с диска</strong>. Если конфиг правили без reload, работающая конфигурация может отличаться. Сравните время изменения файлов с временем старта master-процесса (<code>ps -o lstart= -p $(cat /run/nginx.pid)</code>).</blockquote>
+<p>Дальше ищите по дампу (<code>FILE</code> — имя созданного файла).</p>
+<h4 id="3-1-http-2-cve-2026-123007-cve-2026-123633">3.1. HTTP/2 (CVE-2026-123007, CVE-2026-123633)<a class="anchor" href="#3-1-http-2-cve-2026-123007-cve-2026-123633">#</a></h4>
+<pre data-lang="bash"><code>grep -nE &#x27;listen[^;]*http2|^[[:space:]]*http2[[:space:]]+on&#x27; /root/nginx-config-*.txt</code></pre>
+<ul>
+<li><code>listen 443 ssl http2;</code> — старый синтаксис (nginx ≤ 1.25.0);</li>
+<li><code>http2 on;</code> — новый (1.25.1+);</li>
+<li>пусто — HTTP/2 не включён.</li>
+</ul>
+<p>Проверьте <strong>все</strong> <code>server</code>-блоки на том же адресе и порту: протокол согласуется на listening socket, а не на отдельном <code>location</code>.</p>
+<h4 id="3-2-http-3-cve-2026-121810">3.2. HTTP/3 (CVE-2026-121810)<a class="anchor" href="#3-2-http-3-cve-2026-121810">#</a></h4>
+<pre data-lang="bash"><code>grep -nE &#x27;listen[^;]*quic|^[[:space:]]*http3[[:space:]]+on|Alt-Svc&#x27; /root/nginx-config-*.txt
+ss -lunp &#x27;sport = :443&#x27;</code></pre>
+<p>Если <code>ss</code> показывает <code>nginx</code> на UDP/443 — QUIC-листener активен.</p>
+<h4 id="3-3-resolver-peremennyy-proxy-pass-mirror-cve-2026-123634">3.3. Resolver + переменный proxy_pass + mirror (CVE-2026-123634)<a class="anchor" href="#3-3-resolver-peremennyy-proxy-pass-mirror-cve-2026-123634">#</a></h4>
+<pre data-lang="bash"><code>grep -nE &#x27;^[[:space:]]*resolver[[:space:]]&#x27; /root/nginx-config-*.txt
+grep -nE &#x27;proxy_pass[[:space:]]+https?://[^;]*\$&#x27; /root/nginx-config-*.txt
+grep -nE &#x27;^[[:space:]]*mirror[[:space:]]&#x27; /root/nginx-config-*.txt</code></pre>
+<p>Нужны все три условия: <code>resolver</code>, <code>proxy_pass</code> с переменной (DNS-резолв во время запроса) и <code>mirror</code>. <code>mirror</code> появился в 1.13.4; на более старых версиях путь через <code>mirror</code> невозможен, но advisory допускает другие subrequest-механизмы (например SSI).</p>
+<h4 id="3-4-mail-proxy-cve-2026-113425">3.4. Mail proxy (CVE-2026-113425)<a class="anchor" href="#3-4-mail-proxy-cve-2026-113425">#</a></h4>
+<pre data-lang="bash"><code>grep -nE &#x27;^[[:space:]]*mail[[:space:]]*\{|^[[:space:]]*proxy[[:space:]]+on|^[[:space:]]*auth_http[[:space:]]&#x27; /root/nginx-config-*.txt</code></pre>
+<p>Нужны <code>mail</code>, <code>proxy on</code> и <code>auth_http</code> одновременно. Для обычного веб-сервера этот CVE неприменим.</p>
+<hr>
+<h3 id="4-fakticheskiy-protokol-na-samom-servere">4. Фактический протокол на самом сервере<a class="anchor" href="#4-fakticheskiy-protokol-na-samom-servere">#</a></h3>
+<p>Сначала узнайте, где слушает nginx:</p>
+<pre data-lang="bash"><code>ss -ltnp | grep nginx</code></pre>
+<p>Дальше проверьте ALPN на нужном адресе и порту (подставьте свой SNI и порт; для примера — <code>127.0.0.1:443</code>):</p>
+<pre data-lang="bash"><code>openssl s_client -connect 127.0.0.1:443 -servername example.com -alpn h2,http/1.1 &lt;/dev/null 2&gt;&amp;1 \
+  | grep -E &#x27;ALPN protocol|No ALPN negotiated&#x27;</code></pre>
+<ul>
+<li><code>ALPN protocol: h2</code> — HTTP/2 реально работает;</li>
+<li><code>No ALPN negotiated</code> — HTTP/2 выключен.</li>
+</ul>
+<p>Если nginx за локальным прокси слушает <code>127.0.0.1:8080</code>, проверяйте этот порт (там может быть обычный HTTP без TLS).</p>
+<p>Проверка запросом (если <code>curl</code> собран с HTTP/2 — видно в <code>curl -V</code>):</p>
+<pre data-lang="bash"><code>curl -V | head -1
+curl -skI --http2 --resolve example.com:443:127.0.0.1 https://example.com/</code></pre>
+<p>Ошибка <code>HTTP/2 not supported</code> означает, что сервер не согласовал h2.</p>
+<hr>
+<h3 id="5-proverka-ne-ekspluatirovali-li-uyazvimost">5. Проверка, не эксплуатировали ли уязвимость<a class="anchor" href="#5-proverka-ne-ekspluatirovali-li-uyazvimost">#</a></h3>
+<pre data-lang="bash"><code>ss -tinp state established &#x27;( sport = :443 )&#x27;</code></pre>
+<p>Запустите дважды с интервалом и сравните <code>bytes_received</code>/<code>bytes_sent</code>. Подозрительно: один долгий коннект с быстро растущим входящим трафиком и много коротких TLS-соединений с того же IP.</p>
+<pre data-lang="bash"><code>grep -Ei &#x27;worker process.*exited|signal 11|segfault&#x27; /var/log/nginx/error.log
+coredumpctl list 2&gt;/dev/null | grep nginx</code></pre>
+<p>Аномальные завершения воркеров — слабый, но полезный признак.</p>
+<pre data-lang="bash"><code>ps -eo uid,user,pid,ppid,args | grep &#x27;[n]ginx: worker&#x27;</code></pre>
+<p>Запомните UID воркера и включите аудит запуска процессов (если есть <code>auditd</code>):</p>
+<pre data-lang="bash"><code>auditctl -a always,exit -F arch=b64 -S execve,execveat -F euid=&lt;UID&gt; -k nginx_worker_exec
+ausearch -k nginx_worker_exec -ts recent -i</code></pre>
+<p>Любой <code>/bin/sh</code>, <code>/bin/bash</code> или другой процесс, запущенный воркером nginx, — признак компрометации. Правило видит только события после установки.</p>
+<hr>
+<h3 id="6-deystviya">6. Действия<a class="anchor" href="#6-deystviya">#</a></h3>
+<h4 id="6-1-obnovlenie-osnovnoe">6.1. Обновление (основное)<a class="anchor" href="#6-1-obnovlenie-osnovnoe">#</a></h4>
+<pre data-lang="bash"><code>apt update &amp;&amp; apt install --only-upgrade nginx     # Debian/Ubuntu
+# или
+dnf upgrade nginx                                   # RHEL-семейство
+nginx -v
+systemctl restart nginx</code></pre>
+<p>Нужна сборка с ядром <strong>1.31.9+</strong> или <strong>1.30.7+</strong> (либо дистрибутив с бэкпортом). <code>reload</code> не заменяет исполняемый файл — только <code>restart</code>.</p>
+<h4 id="6-2-vremennaya-mera-vyklyuchit-http-2">6.2. Временная мера: выключить HTTP/2<a class="anchor" href="#6-2-vremennaya-mera-vyklyuchit-http-2">#</a></h4>
+<p>nginx 1.25.1 и новее — в каждом затронутом <code>server</code>:</p>
+<pre data-lang="nginx"><code>listen 443 ssl;
+http2 off;</code></pre>
+<p>nginx 1.9.5–1.25.0 — убрать параметр:</p>
+<pre data-lang="nginx"><code>listen 443 ssl;</code></pre>
+<p>Затем:</p>
+<pre data-lang="bash"><code>nginx -t
+systemctl reload nginx
+ps -eo pid,args | grep &#x27;worker process is shutting down&#x27;</code></pre>
+<p>Если старые воркеры остались — <code>systemctl restart nginx</code> (они держат уже открытые h2-соединения). После этого повторите проверку ALPN из раздела 4.</p>
+<h4 id="6-3-http-3">6.3. HTTP/3<a class="anchor" href="#6-3-http-3">#</a></h4>
+<p>В затронутых <code>server</code>:</p>
+<pre data-lang="nginx"><code>listen 443 ssl;
+# listen 443 quic reuseport;
+http3 off;
+add_header Alt-Svc &#x27;clear&#x27; always;</code></pre>
+<pre data-lang="bash"><code>nginx -t &amp;&amp; systemctl reload nginx
+ss -lunp &#x27;sport = :443&#x27;</code></pre>
+<p>В выводе не должно остаться <code>nginx</code>.</p>
+<h4 id="6-4-resolver-mirror">6.4. Resolver + mirror<a class="anchor" href="#6-4-resolver-mirror">#</a></h4>
+<p>Уберите <code>mirror</code> или замените <code>proxy_pass</code> с переменной на фиксированный <code>upstream</code>:</p>
+<pre data-lang="nginx"><code>upstream backend_fixed {
+    server 10.0.0.10:8080;
+}
+location / {
+    mirror off;
+    proxy_pass http://backend_fixed;
+}</code></pre>
+<p><code>mirror_request_body on;</code> останавливает протестированный эксплойт, но <strong>не исправляет</strong> ошибку — не полагайтесь на него.</p>
+<h4 id="6-5-mail-proxy">6.5. Mail proxy<a class="anchor" href="#6-5-mail-proxy">#</a></h4>
+<p>Если внешний доступ не нужен — слушать только loopback:</p>
+<pre data-lang="nginx"><code>listen 127.0.0.1:143;</code></pre>
+<p>Иначе — ограничить порты 25/110/143/465/587/993/995 на firewall.</p>
+<hr>
+<h3 id="7-chek-list">7. Чек-лист<a class="anchor" href="#7-chek-list">#</a></h3>
+<ul>
+<li class="task"><span class="box"></span><code>nginx -v</code> и полная версия пакета записаны;</li>
+<li class="task"><span class="box"></span>проверено, что запущен именно этот бинарник;</li>
+<li class="task"><span class="box"></span><code>-V</code> проверен на <code>--with-http_v2_module</code>;</li>
+<li class="task"><span class="box"></span><code>nginx -T</code> сохранён, h2/h3/resolver/mirror/mail проверены по дампу;</li>
+<li class="task"><span class="box"></span>ALPN на loopback: <code>h2</code> или <code>http/1.1</code>;</li>
+<li class="task"><span class="box"></span><code>ss -lunp &#x27;sport = :443&#x27;</code> — есть ли QUIC;</li>
+<li class="task"><span class="box"></span>просмотрены error.log и <code>ss</code> на предмет аномалий;</li>
+<li class="task"><span class="box"></span>при необходимости выполнено обновление и <code>restart</code>;</li>
+<li class="task"><span class="box"></span>после изменений повторно проверен ALPN и <code>nginx -v</code>.</li>
+</ul>
+<p>Сохраните: вывод <code>nginx -v</code>, <code>nginx -V</code>, строки из <code>-T</code> по найденным директивам (без сертификатов и паролей), <code>ss -ltnp</code>, результат ALPN и <code>nginx-config-*.txt</code> в защищённом месте.</p>
+<hr>
+<p>Если <code>Server</code> снаружи отвечает <code>openresty</code>, команды те же, но бинарник и сервис называются <code>openresty</code>, а версия ядра — первые три числа в <code>openresty/1.25.3.2</code> (это <code>1.25.3</code>).</p>
+    </section>
+  </main>
+</div>
+<footer>
+  <div class="wrap">
+    <span>Источник: README.md и docs/server-check.md репозитория nginx2root.</span>
+    <span>Сборка: 2026-11-20</span>
+  </div>
+</footer>
+</body>
+</html>
