@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration test: real nginx in Docker, three configurations.
+# Integration test: real nginx in Docker, four configurations.
 #
 #   tests/integration/run.sh
 #
@@ -164,7 +164,7 @@ import sys
 tmp = sys.argv[1]
 cases = [
     ("h2-vuln",     "CVE-2026-123007", "LIKELY_VULNERABLE", 1),
-    ("h1-vuln",     "CVE-2026-123007", "MITIGATED",         0),
+    ("h1-vuln",     "CVE-2026-123007", "MITIGATED",         2),
     ("h2-patched",  "CVE-2026-123007", "PATCHED",           0),
     ("h3-vuln",     "CVE-2026-121810", "LIKELY_VULNERABLE", 1),
 ]

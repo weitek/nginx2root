@@ -267,7 +267,7 @@ footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space
 <th>Уязвимы</th>
 <th>Нужно для атаки</th>
 </tr></thead><tbody>
-<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123007">CVE-2026-123007</a></td><td>переполнение окна flow control в HTTP/2 (RCE, critical)</td><td>1.9.5–1.31.8</td><td>HTTP/2</td></tr>
+<tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123007">CVE-2026-123007</a></td><td>переполнение окна flow control в HTTP/2 (RCE; major по NGINX, critical по Xint)</td><td>1.9.5–1.31.8</td><td>HTTP/2</td></tr>
 <tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123634">CVE-2026-123634</a></td><td>use-after-free в resolver</td><td>0.6.18–1.31.8</td><td><code>resolver</code> + <code>proxy_pass</code> с переменной + <code>mirror</code></td></tr>
 <tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-123633">CVE-2026-123633</a></td><td>use-after-free в HTTP/2</td><td>1.19.7–1.31.8</td><td>HTTP/2 + проксирование на upstream</td></tr>
 <tr><td><a href="https://www.cve.org/CVERecord?id=CVE-2026-121810">CVE-2026-121810</a></td><td>use-after-free в HTTP/3</td><td>1.25.0–1.31.8</td><td>HTTP/3 + проксирование на upstream</td></tr>
@@ -303,7 +303,7 @@ cat targets.txt | ./nginx2root_check.py --no-h3</code></pre>
 <tr><td><code>--concurrency N</code></td><td>параллельность в batch-режиме (по умолчанию 2)</td></tr>
 <tr><td><code>-v</code></td><td>диагностика в stderr</td></tr>
 </tbody></table>
-<p>Коды выхода: <code>0</code> — проблем не найдено, <code>1</code> — есть <code>LIKELY_VULNERABLE</code>, <code>2</code> — результат неопределён (CDN, неизвестная версия, ошибка), <code>3</code> — ошибка аргументов.</p>
+<p>Коды выхода: <code>0</code> — проблем не найдено и непроверенных CVE нет, <code>1</code> — есть <code>LIKELY_VULNERABLE</code>, <code>2</code> — результат неопределён (CDN, неизвестная версия, нужна проверка на сервере, ошибка), <code>3</code> — ошибка аргументов.</p>
 <h3 id="chto-imenno-proveryaetsya">Что именно проверяется<a class="anchor" href="#chto-imenno-proveryaetsya">#</a></h3>
 <ol>
 <li><strong>TLS/ALPN.</strong> Отдельное рукопожатие с <code>ALPN=[&quot;h2&quot;,&quot;http/1.1&quot;]</code>. Если сервер согласовал <code>h2</code>, значит HTTP/2 включён на этом порту — это условие CVE-2026-123007 и CVE-2026-123633.</li>
@@ -337,10 +337,11 @@ cat targets.txt | ./nginx2root_check.py --no-h3</code></pre>
 </tr></thead><tbody>
 <tr><td><code>ТРЕБУЕТСЯ ДЕЙСТВИЕ</code></td><td>есть <code>LIKELY_VULNERABLE</code></td><td>1</td></tr>
 <tr><td><code>НУЖНА РУЧНАЯ ПРОВЕРКА</code></td><td>есть <code>INCONCLUSIVE</code></td><td>2</td></tr>
-<tr><td><code>ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ</code></td><td>только <code>PATCHED</code>/<code>MITIGATED</code>/<code>NOT_AFFECTED</code></td><td>0</td></tr>
+<tr><td><code>НУЖНА ПРОВЕРКА НА СЕРВЕРЕ</code></td><td>есть <code>UNKNOWN</code>, но нет <code>LIKELY_VULNERABLE</code>/<code>INCONCLUSIVE</code></td><td>2</td></tr>
+<tr><td><code>ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ</code></td><td>только <code>PATCHED</code>/<code>MITIGATED</code>/<code>NOT_AFFECTED</code>/<code>NOT_APPLICABLE</code></td><td>0</td></tr>
 <tr><td><code>ПРОВЕРКА НЕ ВЫПОЛНЕНА</code></td><td>нет DNS/соединения, CVE не проверялись</td><td>2</td></tr>
 </tbody></table>
-<p>Если проверка невозможна (DNS, таймаут, TLS), таблица CVE не выводится — вместо неё причина и рекомендация. При <code>--no-h3</code> вердикт HTTP/3 становится <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code> и не влияет на код выхода. Если UDP/443 не ответил, HTTP/3 тоже помечается <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code>: молчание UDP может означать фильтр, а не отсутствие HTTP/3.</p>
+<p>Если проверка невозможна (DNS, таймаут, TLS), таблица CVE не выводится — вместо неё причина и рекомендация. При <code>--no-h3</code> вердикт HTTP/3 становится <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code>; если это единственная неопределённость, итоговый код — <code>2</code>. Если UDP/443 не ответил, HTTP/3 тоже помечается <code>ПРОВЕРИТЬ НА СЕРВЕРЕ</code>: молчание UDP может означать фильтр, а не отсутствие HTTP/3.</p>
 <p>Таймауты и сетевые ошибки повторяются до <code>--attempts</code> раз (по умолчанию 3). Если ответ получен не с первой попытки, в <code>note</code> появляется строка «связь нестабильна: успешный ответ получен с попытки N из M».</p>
 <p>Версия берётся не только из <code>nginx/1.30.7</code>, но и из вендорских токенов: <code>nginx-reuseport/1.30.7</code>, <code>nginx-naxsi/1.24.0</code>, <code>nginx-extras/1.18.0</code>. Для таких сборок добавляется <code>note</code> с исходным токеном.</p>
 <p>Пример:</p>
@@ -398,7 +399,7 @@ sudo nginx -T | grep -nE &#x27;listen[[:space:]].*http2|^[[:space:]]*http2[[:spa
         {
           &quot;cve&quot;: &quot;CVE-2026-123007&quot;,
           &quot;title&quot;: &quot;HTTP/2 flow-control window overflow&quot;,
-          &quot;severity&quot;: &quot;critical&quot;,
+          &quot;severity&quot;: &quot;major&quot;,
           &quot;verdict&quot;: &quot;LIKELY_VULNERABLE&quot;,
           &quot;verdict_label&quot;: &quot;ВЕРОЯТНО УЯЗВИМ&quot;,
           &quot;action&quot;: &quot;UPDATE&quot;,
@@ -466,7 +467,7 @@ ls -l /proc/$(cat /run/nginx.pid)/exe</code></pre>
 <tr><td>1.9.5 – 1.31.8</td><td>код уязвим к CVE-2026-123007 (если включён HTTP/2)</td></tr>
 <tr><td>1.30.0 – 1.30.6</td><td>уязвима ветка 1.30</td></tr>
 <tr><td>1.31.9+ или 1.30.7+</td><td>исправлено</td></tr>
-<tr><td>1.9.4 и старше</td><td>не затронута HTTP/2-уязвимостями</td></tr>
+<tr><td>1.9.4 и младше</td><td>не затронута HTTP/2-уязвимостями</td></tr>
 <tr><td><code>nginx-reuseport/1.30.7</code>, <code>nginx-naxsi/1.24.0</code></td><td>вендорский токен: ядро — цифры после <code>/</code> (здесь 1.30.7 и 1.24.0)</td></tr>
 <tr><td><code>1.18.0-6ubuntu14.22</code> и подобные</td><td>дистрибутивная сборка: <code>nginx -v</code> не показывает бэкпорт, сверяйте полную версию пакета с advisory (Ubuntu — <a href="https://ubuntu.com/security/notices/USN-8955-1">USN-8955-1</a>)</td></tr>
 </tbody></table>

@@ -68,7 +68,7 @@ CVE_META: List[Dict[str, Any]] = [
         "min_affected": (1, 9, 5),
         "needs": "h2",
         "config_only": False,
-        "severity": "critical",
+        "severity": "major",
         "f5": "https://my.f5.com/manage/s/article/K000163926",
     },
     {
@@ -101,7 +101,7 @@ CVE_META: List[Dict[str, Any]] = [
     {
         "cve": "CVE-2026-113425",
         "title": "use-after-free in mail proxy",
-        "min_affected": (0, 0, 0),
+        "min_affected": (0, 5, 33),
         "needs": "mail",
         "config_only": True,
         "severity": "major",
@@ -395,7 +395,7 @@ def resolve_preflight(host: str, port: int) -> Optional[Tuple[str, str]]:
 
 def make_tls_context(alpn: Sequence[str], verify: bool) -> ssl.SSLContext:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
+    context.check_hostname = verify
     if verify:
         context.verify_mode = ssl.CERT_REQUIRED
         context.load_default_certs()
@@ -500,8 +500,13 @@ def _parse_http_response(raw: bytes) -> Tuple[Optional[int], Dict[str, str], byt
 
 
 def _http11_exchange(host: str, port: int, timeout: float, request: bytes,
-                     verify: bool, servername: str, want_body: bool = False) -> bytes:
-    sock = tls_connect(host, port, timeout, ("http/1.1",), verify, servername)
+                     verify: bool, servername: str, want_body: bool = False,
+                     use_tls: bool = True) -> bytes:
+    if use_tls:
+        sock = tls_connect(host, port, timeout, ("http/1.1",), verify, servername)
+    else:
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.settimeout(timeout)
     with sock:
         sock.sendall(request)
         chunks: List[bytes] = []
@@ -522,7 +527,8 @@ def _http11_exchange(host: str, port: int, timeout: float, request: bytes,
 
 
 def probe_http11(
-    host: str, port: int, timeout: float, authority: str, path: str, verify: bool
+    host: str, port: int, timeout: float, authority: str, path: str, verify: bool,
+    use_tls: bool = True,
 ) -> Http11Probe:
     request = (
         "HEAD %s HTTP/1.1\r\n"
@@ -532,7 +538,10 @@ def probe_http11(
         "Connection: close\r\n\r\n"
     ) % (path, authority, USER_AGENT)
     try:
-        raw = _http11_exchange(host, port, timeout, request.encode("latin-1"), verify, host)
+        raw = _http11_exchange(
+            host, port, timeout, request.encode("latin-1"), verify, host,
+            use_tls=use_tls,
+        )
     except Exception as exc:  # noqa: BLE001
         code, message = describe_exception(exc)
         return Http11Probe(ok=False, error=message, error_code=code)
@@ -558,7 +567,8 @@ def probe_http11(
         ) % (probe_path, authority, USER_AGENT)
         try:
             raw2 = _http11_exchange(
-                host, port, timeout, fallback.encode("latin-1"), verify, host, want_body=True
+                host, port, timeout, fallback.encode("latin-1"), verify, host,
+                want_body=True, use_tls=use_tls,
             )
             status2, headers2, body2 = _parse_http_response(raw2)
             for key, value in headers2.items():
@@ -863,9 +873,10 @@ def detect_cdn(headers: Dict[str, str]) -> Optional[str]:
 
 
 def fingerprint(
-    host: str, port: int, timeout: float, authority: str, path: str, verify: bool
+    host: str, port: int, timeout: float, authority: str, path: str, verify: bool,
+    use_tls: bool = True,
 ) -> Http11Probe:
-    return probe_http11(host, port, timeout, authority, path, verify)
+    return probe_http11(host, port, timeout, authority, path, verify, use_tls=use_tls)
 
 
 # --------------------------------------------------------------------------
@@ -962,7 +973,8 @@ def _collect_once(target: Target, options: Options) -> Observation:
         obs.h2_negotiated = False
 
     http = fingerprint(
-        target.host, target.port, options.timeout, target.authority, target.path, options.verify
+        target.host, target.port, options.timeout, target.authority, target.path,
+        options.verify, use_tls=target.scheme == "https",
     )
     if http.ok:
         obs.http_status = http.status
@@ -1066,6 +1078,15 @@ def verdict_for(obs: Observation, meta: Dict[str, Any]) -> Tuple[str, str]:
             "Server: %s — это не nginx" % (obs.server_header or "неизвестно"),
         )
 
+    # A version or protocol observed at a CDN edge says nothing reliable about
+    # the origin, even when the edge happens to expose an nginx version.
+    if obs.cdn:
+        return (
+            INCONCLUSIVE,
+            "перед сервером CDN/прокси (%s); проверка бьёт в edge, а не в nginx. "
+            "Запустите проверку против origin напрямую" % obs.cdn,
+        )
+
     status = _version_part(obs, meta)
 
     if status == PATCHED:
@@ -1110,13 +1131,6 @@ def verdict_for(obs: Observation, meta: Dict[str, Any]) -> Tuple[str, str]:
         return (
             UNKNOWN,
             "версия не определена; уязвимость зависит от конфигурации",
-        )
-
-    if obs.cdn:
-        return (
-            INCONCLUSIVE,
-            "перед сервером CDN/прокси (%s); проверка бьёт в edge, а не в nginx. "
-            "Запустите проверку против origin напрямую" % obs.cdn,
         )
 
     if meta["needs"] == "h2":
@@ -1267,6 +1281,13 @@ def summarize(findings: Iterable[Finding], status: str = STATUS_OK) -> Dict[str,
         action = "MANUAL"
         action_label = "уточнить CDN/бэкпорт/ошибку связи"
         detail = "автоматический вердикт невозможен"
+        exit_code = 2
+    elif counts.get(UNKNOWN):
+        verdict = "INCONCLUSIVE"
+        headline = "НУЖНА ПРОВЕРКА НА СЕРВЕРЕ"
+        action = "CHECK_HOST"
+        action_label = "проверить конфигурацию на сервере"
+        detail = "не все CVE можно проверить снаружи"
         exit_code = 2
     else:
         verdict = "OK"
@@ -1610,6 +1631,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         parser.error("--timeout должен быть больше нуля")
     if args.attempts < 1:
         parser.error("--attempts должен быть не меньше 1")
+    if args.concurrency < 1:
+        parser.error("--concurrency должен быть не меньше 1")
     if not args.targets and not args.file and sys.stdin.isatty():
         parser.error("укажите URL (или --file, или список в stdin)")
     try:
@@ -1618,6 +1641,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     except KeyboardInterrupt:
         return 130
+    except OSError as exc:
+        print("ошибка ввода/вывода: %s" % exc, file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

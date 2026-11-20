@@ -12,7 +12,7 @@
 
 | CVE | Что это | Уязвимы | Нужно для атаки |
 |---|---|---|---|
-| [CVE-2026-123007](https://www.cve.org/CVERecord?id=CVE-2026-123007) | переполнение окна flow control в HTTP/2 (RCE, critical) | 1.9.5–1.31.8 | HTTP/2 |
+| [CVE-2026-123007](https://www.cve.org/CVERecord?id=CVE-2026-123007) | переполнение окна flow control в HTTP/2 (RCE; major по NGINX, critical по Xint) | 1.9.5–1.31.8 | HTTP/2 |
 | [CVE-2026-123634](https://www.cve.org/CVERecord?id=CVE-2026-123634) | use-after-free в resolver | 0.6.18–1.31.8 | `resolver` + `proxy_pass` с переменной + `mirror` |
 | [CVE-2026-123633](https://www.cve.org/CVERecord?id=CVE-2026-123633) | use-after-free в HTTP/2 | 1.19.7–1.31.8 | HTTP/2 + проксирование на upstream |
 | [CVE-2026-121810](https://www.cve.org/CVERecord?id=CVE-2026-121810) | use-after-free в HTTP/3 | 1.25.0–1.31.8 | HTTP/3 + проксирование на upstream |
@@ -54,9 +54,9 @@ cat targets.txt | ./nginx2root_check.py --no-h3
 | `--concurrency N` | параллельность в batch-режиме (по умолчанию 2) |
 | `-v` | диагностика в stderr |
 
-Коды выхода: `0` — проблем не найдено, `1` — есть `LIKELY_VULNERABLE`,
-`2` — результат неопределён (CDN, неизвестная версия, ошибка), `3` — ошибка
-аргументов.
+Коды выхода: `0` — проблем не найдено и непроверенных CVE нет, `1` — есть
+`LIKELY_VULNERABLE`, `2` — результат неопределён (CDN, неизвестная версия,
+нужна проверка на сервере, ошибка), `3` — ошибка аргументов.
 
 ## Что именно проверяется
 
@@ -98,14 +98,15 @@ cat targets.txt | ./nginx2root_check.py --no-h3
 |---|---|---|
 | `ТРЕБУЕТСЯ ДЕЙСТВИЕ` | есть `LIKELY_VULNERABLE` | 1 |
 | `НУЖНА РУЧНАЯ ПРОВЕРКА` | есть `INCONCLUSIVE` | 2 |
-| `ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ` | только `PATCHED`/`MITIGATED`/`NOT_AFFECTED` | 0 |
+| `НУЖНА ПРОВЕРКА НА СЕРВЕРЕ` | есть `UNKNOWN`, но нет `LIKELY_VULNERABLE`/`INCONCLUSIVE` | 2 |
+| `ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ` | только `PATCHED`/`MITIGATED`/`NOT_AFFECTED`/`NOT_APPLICABLE` | 0 |
 | `ПРОВЕРКА НЕ ВЫПОЛНЕНА` | нет DNS/соединения, CVE не проверялись | 2 |
 
 Если проверка невозможна (DNS, таймаут, TLS), таблица CVE не выводится —
 вместо неё причина и рекомендация. При `--no-h3` вердикт HTTP/3 становится
-`ПРОВЕРИТЬ НА СЕРВЕРЕ` и не влияет на код выхода. Если UDP/443 не ответил,
-HTTP/3 тоже помечается `ПРОВЕРИТЬ НА СЕРВЕРЕ`: молчание UDP может означать
-фильтр, а не отсутствие HTTP/3.
+`ПРОВЕРИТЬ НА СЕРВЕРЕ`; если это единственная неопределённость, итоговый код — `2`.
+Если UDP/443 не ответил, HTTP/3 тоже помечается `ПРОВЕРИТЬ НА СЕРВЕРЕ`:
+молчание UDP может означать фильтр, а не отсутствие HTTP/3.
 
 Таймауты и сетевые ошибки повторяются до `--attempts` раз (по умолчанию 3).
 Если ответ получен не с первой попытки, в `note` появляется строка
@@ -204,7 +205,7 @@ sudo nginx -T | grep -nE 'listen[[:space:]].*http2|^[[:space:]]*http2[[:space:]]
         {
           "cve": "CVE-2026-123007",
           "title": "HTTP/2 flow-control window overflow",
-          "severity": "critical",
+          "severity": "major",
           "verdict": "LIKELY_VULNERABLE",
           "verdict_label": "ВЕРОЯТНО УЯЗВИМ",
           "action": "UPDATE",

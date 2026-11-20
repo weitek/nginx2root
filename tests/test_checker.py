@@ -8,6 +8,8 @@ No third-party packages are required. The network tests start local TLS/UDP
 servers in background threads and do not touch the Internet.
 """
 
+import contextlib
+import io
 import os
 import socket
 import ssl
@@ -80,7 +82,8 @@ class VersionTests(unittest.TestCase):
             ((1, 31, 9), (1, 19, 7), chk.PATCHED),
             ((1, 20, 0), (1, 25, 0), chk.NOT_AFFECTED),
             ((1, 25, 0), (1, 25, 0), "VULNERABLE"),
-            ((0, 5, 32), (0, 0, 0), "VULNERABLE"),
+            ((0, 5, 32), (0, 5, 33), chk.NOT_AFFECTED),
+            ((0, 5, 33), (0, 5, 33), "VULNERABLE"),
             ((2, 0, 0), (1, 9, 5), chk.PATCHED),
         ]
         for version, minimum, expected in cases:
@@ -93,6 +96,24 @@ class VersionTests(unittest.TestCase):
             chk.detect_distro("nginx/1.22.1 (Debian)"), "Debian"
         )
         self.assertIsNone(chk.detect_distro("nginx/1.31.8"))
+
+
+class AdvisoryTests(unittest.TestCase):
+    def test_advisory_metadata(self):
+        self.assertEqual(chk.CVE_META[0]["severity"], "major")
+        self.assertEqual(chk.CVE_META[-1]["min_affected"], (0, 5, 33))
+
+
+class TlsContextTests(unittest.TestCase):
+    def test_verify_enables_certificate_and_hostname_checks(self):
+        context = chk.make_tls_context(("h2", "http/1.1"), verify=True)
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_no_verify_disables_certificate_and_hostname_checks(self):
+        context = chk.make_tls_context(("http/1.1",), verify=False)
+        self.assertFalse(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_NONE)
 
 
 class HpackTests(unittest.TestCase):
@@ -240,6 +261,16 @@ class VerdictTests(unittest.TestCase):
         obs = make_obs(cdn="Cloudflare", server_header="cloudflare")
         self.assertEqual(verdict_for(obs, "CVE-2026-123007"), chk.INCONCLUSIVE)
 
+    def test_cdn_patched_edge_version_does_not_describe_origin(self):
+        obs = make_obs(
+            cdn="Cloudflare",
+            nginx_version=(1, 31, 9),
+            server_header="nginx/1.31.9",
+        )
+        for finding in chk.evaluate(obs):
+            with self.subTest(cve=finding.cve):
+                self.assertEqual(finding.verdict, chk.INCONCLUSIVE)
+
     def test_other_server_is_not_applicable(self):
         obs = make_obs(
             server_header="Apache/2.4.62", server_is_nginx=False,
@@ -333,12 +364,24 @@ class SummaryTests(unittest.TestCase):
     def test_ok(self):
         findings = [
             chk.Finding("CVE-X", "t", "medium", chk.PATCHED, "r", "u"),
-            chk.Finding("CVE-Y", "t", "medium", chk.UNKNOWN, "r", "u"),
+            chk.Finding("CVE-Y", "t", "medium", chk.MITIGATED, "r", "u"),
         ]
         summary = chk.summarize(findings)
         self.assertEqual(summary["verdict"], "OK")
         self.assertEqual(summary["exit_code"], 0)
         self.assertEqual(summary["headline"], "ДЕЙСТВИЙ НЕ ТРЕБУЕТСЯ")
+        self.assertEqual(summary["uncheckable"], 0)
+
+    def test_unknown_requires_host_check(self):
+        findings = [
+            chk.Finding("CVE-X", "t", "medium", chk.PATCHED, "r", "u"),
+            chk.Finding("CVE-Y", "t", "medium", chk.UNKNOWN, "r", "u"),
+        ]
+        summary = chk.summarize(findings)
+        self.assertEqual(summary["verdict"], "INCONCLUSIVE")
+        self.assertEqual(summary["exit_code"], 2)
+        self.assertEqual(summary["headline"], "НУЖНА ПРОВЕРКА НА СЕРВЕРЕ")
+        self.assertEqual(summary["action"], "CHECK_HOST")
         self.assertEqual(summary["uncheckable"], 1)
 
     def test_failed(self):
@@ -365,13 +408,14 @@ class SummaryTests(unittest.TestCase):
 
 
 class FakeNginx:
-    """Tiny TLS server that speaks just enough HTTP/1.1 and HTTP/2."""
+    """Tiny TCP/TLS server that speaks just enough HTTP/1.1 and HTTP/2."""
 
     def __init__(self, server_header="nginx/1.31.8", alpn=("h2", "http/1.1"),
-                 extra_headers=None):
+                 extra_headers=None, use_tls=True):
         self.server_header = server_header
         self.extra_headers = extra_headers or []
         self.alpn = list(alpn)
+        self.use_tls = use_tls
         self._stop = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -379,9 +423,11 @@ class FakeNginx:
         self.sock.listen(16)
         self.sock.settimeout(0.2)
         self.port = self.sock.getsockname()[1]
-        self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        self.context.load_cert_chain(CERT, KEY)
-        self.context.set_alpn_protocols(self.alpn)
+        self.context = None
+        if self.use_tls:
+            self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            self.context.load_cert_chain(CERT, KEY)
+            self.context.set_alpn_protocols(self.alpn)
         self.thread = threading.Thread(target=self._serve, daemon=True)
         self.thread.start()
 
@@ -406,7 +452,10 @@ class FakeNginx:
     def _handle(self, conn):
         conn.settimeout(3)
         try:
-            tls = self.context.wrap_socket(conn, server_side=True)
+            tls = (
+                self.context.wrap_socket(conn, server_side=True)
+                if self.use_tls else conn
+            )
         except Exception:  # noqa: BLE001 - handshake failures are expected in tests
             conn.close()
             return
@@ -503,6 +552,20 @@ class FakeQuic:
 
 
 class NetworkTests(unittest.TestCase):
+    def test_plain_http(self):
+        server = FakeNginx(use_tls=False)
+        try:
+            target = chk.parse_target("http://127.0.0.1:%d/" % server.port, None, None)
+            obs = chk.collect(target, chk.Options(timeout=2, h3=False))
+        finally:
+            server.close()
+        self.assertEqual(obs.status, chk.STATUS_OK)
+        self.assertFalse(obs.tls_ok)
+        self.assertEqual(obs.http_status, 200)
+        self.assertEqual(obs.nginx_version, (1, 31, 8))
+        findings = {f.cve: f.verdict for f in chk.evaluate(obs)}
+        self.assertEqual(findings["CVE-2026-123007"], chk.INCONCLUSIVE)
+
     def test_http1_only(self):
         server = FakeNginx(alpn=("http/1.1",))
         try:
@@ -675,6 +738,25 @@ class FailureAndRenderingTests(unittest.TestCase):
         self.assertIn("ВЕРОЯТНО УЯЗВИМ", text)
         self.assertIn("обновить nginx", text)
         self.assertIn("ПРОВЕРИТЬ НА СЕРВЕРЕ", text)
+
+
+class CliTests(unittest.TestCase):
+    def test_invalid_concurrency_is_usage_error(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            chk.main(["--concurrency", "0", "https://example.com"])
+        self.assertEqual(raised.exception.code, 3)
+        self.assertIn("--concurrency", stderr.getvalue())
+
+    def test_missing_target_file_has_no_traceback(self):
+        with tempfile.TemporaryDirectory(prefix="nginx2root-test-") as tmp:
+            missing = os.path.join(tmp, "missing.txt")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = chk.main(["--file", missing])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("ошибка ввода/вывода", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
 
 class TargetParsingTests(unittest.TestCase):
